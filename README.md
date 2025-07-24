@@ -54,6 +54,11 @@ The server provides these tools for AI assistants:
 - `search_stocks` - Search for stock symbols by company name
 - `get_portfolio_summary` - Get quotes for multiple stocks
 
+
+### use for testing 
+npx @modelcontextprotocol/inspector@latest
+
+
 ### Configuration
 
 Update your MCP client configuration to include this server:
