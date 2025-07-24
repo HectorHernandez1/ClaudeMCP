@@ -57,7 +57,8 @@ The server provides these tools for AI assistants:
 
 ### use for testing 
 npx @modelcontextprotocol/inspector@latest
-
+arguments - run --with mcp mcp run ./stock_data.py
+Transport Type- STDIO
 
 ### Configuration
 

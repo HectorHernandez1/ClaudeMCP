@@ -5,10 +5,18 @@ Provides real-time stock quotes, company info, and market data
 """
 
 import os
+import logging
 from typing import Any, Dict, List
 import aiohttp
 import asyncio
 from mcp.server.fastmcp import FastMCP
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # Alpha Vantage API configuration
 ALPHA_VANTAGE_BASE_URL = "https://www.alphavantage.co/query"
@@ -66,8 +74,11 @@ async def get_stock_quote(symbol: str) -> Dict[str, Any]:
     
     data = await stock_provider._make_request(params)
     
+    # Debug: Print the actual response
+    print(f"API Response for {symbol}: {data}")
+    
     if "Global Quote" not in data:
-        raise ValueError(f"No data found for symbol: {symbol}")
+        raise ValueError(f"No data found for symbol: {symbol}. Response: {data}")
     
     quote = data["Global Quote"]
     return {
@@ -235,8 +246,13 @@ async def get_portfolio_summary(symbols: List[str]) -> Dict[str, Any]:
     }
 
 if __name__ == "__main__":
+    logger.info("Starting Stock Data MCP Server...")
+    logger.info(f"API Key configured: {'Yes' if API_KEY != 'demo' else 'Using demo key'}")
     try:
+        logger.info("Server is running and ready to accept requests")
         mcp.run(transport="stdio")
     finally:
+        logger.info("Shutting down server...")
         # Cleanup on exit
         asyncio.run(stock_provider.close())
+        logger.info("Server shutdown complete")
