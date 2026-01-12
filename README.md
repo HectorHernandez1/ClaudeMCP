@@ -1,88 +1,221 @@
-# Stock Data MCP Server
+# Claude MCP Server Collection
 
-A Model Context Protocol (MCP) server that provides real-time stock market data using the Alpha Vantage API. This server enables AI assistants to fetch stock quotes, company information, historical prices, and search for stock symbols.
+A curated collection of Model Context Protocol (MCP) servers for Claude AI, providing real-time access to stocks, weather, news, databases, and more.
 
-## Features
+## 🌟 What is MCP?
 
-- **Real-time Stock Quotes**: Get current stock prices, changes, and trading volume
-- **Company Overview**: Access fundamental data including market cap, P/E ratio, sector info
-- **Historical Data**: Retrieve daily stock prices with adjustable time ranges
-- **Symbol Search**: Find stock symbols by company name or keywords
-- **Portfolio View**: Get quotes for multiple stocks simultaneously
+The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is an open standard that enables AI assistants like Claude to securely connect to external data sources and tools. This repository provides ready-to-use MCP servers that extend Claude's capabilities.
 
-## Setup
+## 📦 Available Servers
+
+### 🔴 Live Servers
+
+| Server | Description | Status | API Required |
+|--------|-------------|--------|--------------|
+| [**Stock Data**](servers/stock/) | Real-time stock quotes, company info, historical prices | ✅ Ready | Alpha Vantage (Free) |
+
+### 🟡 Coming Soon
+
+| Server | Description | API Required |
+|--------|-------------|--------------|
+| **Weather** | Current weather, forecasts, alerts | OpenWeather or WeatherAPI (Free) |
+| **News** | Latest news from multiple sources | NewsAPI (Free) |
+| **Database** | Query PostgreSQL, MySQL, MongoDB | Database credentials |
+
+## 🚀 Quick Start
 
 ### Prerequisites
 
 - Python 3.7+
-- Alpha Vantage API key (get free key at [alphavantage.co](https://www.alphavantage.co/support/#api-key))
+- Claude Desktop App or compatible MCP client
+- API keys for the services you want to use
 
 ### Installation
 
-1. Clone this repository
-2. Install dependencies:
+1. **Clone this repository:**
+   ```bash
+   git clone https://github.com/HectorHernandez1/ClaudeMCP.git
+   cd ClaudeMCP
+   ```
+
+2. **Install dependencies:**
    ```bash
    pip install -r requirements.txt
    ```
 
-3. Set up your environment variables:
+3. **Configure environment variables:**
    ```bash
-   cp example.config.json config.json
-   # Edit config.json with your actual file path and API key
+   cp .env.example .env
+   # Edit .env with your API keys
    ```
 
-4. Create a `.env` file with your API key:
-   ```
-   ALPHA_VANTAGE_API_KEY=your_api_key_here
+4. **Configure Claude Desktop:**
+
+   Add servers to your Claude Desktop config file:
+
+   **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+
+   **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+   Example configuration:
+   ```json
+   {
+     "mcpServers": {
+       "stock-data": {
+         "command": "python",
+         "args": ["/absolute/path/to/ClaudeMCP/servers/stock/stock_data.py"],
+         "env": {
+           "ALPHA_VANTAGE_API_KEY": "your_api_key_here"
+         }
+       }
+     }
+   }
    ```
 
-## Usage
+5. **Restart Claude Desktop**
 
-### Running the MCP Server
+## 📚 Server Documentation
+
+### Stock Data Server
+
+**Location:** `servers/stock/`
+
+**Features:**
+- Real-time stock quotes with price, volume, change
+- Company fundamentals (P/E ratio, market cap, sector)
+- Daily historical prices
+- Symbol search by company name
+- Portfolio view for multiple stocks
+
+**Setup:**
+1. Get free API key: [alphavantage.co](https://www.alphavantage.co/support/#api-key)
+2. Add to `.env`: `ALPHA_VANTAGE_API_KEY=your_key`
+3. Configure in Claude Desktop (see above)
+
+**Available Tools:**
+- `get_stock_quote` - Real-time quote for a symbol
+- `get_company_overview` - Company fundamentals
+- `get_daily_prices` - Historical daily prices
+- `search_stocks` - Find symbols by company name
+- `get_portfolio_summary` - Multi-symbol quotes
+
+**Rate Limits:** 25 requests/day (free tier)
+
+[📖 Full Documentation](servers/stock/README.md)
+
+---
+
+### Weather Server _(Coming Soon)_
+
+**Location:** `servers/weather/`
+
+**Planned Features:**
+- Current weather conditions
+- 5-7 day forecasts
+- Weather alerts
+- Air quality index
+- UV index
+
+---
+
+### News Server _(Coming Soon)_
+
+**Location:** `servers/news/`
+
+**Planned Features:**
+- Top headlines by category
+- Search articles by keyword
+- Filter by source, language, date
+- RSS feed aggregation
+
+---
+
+### Database Server _(Coming Soon)_
+
+**Location:** `servers/database/`
+
+**Planned Features:**
+- Query PostgreSQL, MySQL, MongoDB
+- Execute safe read queries
+- Schema inspection
+- Connection pooling
+
+## 🧪 Testing
+
+Test any server using the MCP Inspector:
 
 ```bash
-python stock_data.py
-```
-
-### Available Tools
-
-The server provides these tools for AI assistants:
-
-- `get_stock_quote` - Get real-time stock quote for a symbol
-- `get_company_overview` - Get company overview and fundamental data  
-- `get_daily_prices` - Get daily historical stock prices
-- `search_stocks` - Search for stock symbols by company name
-- `get_portfolio_summary` - Get quotes for multiple stocks
-
-
-### use for testing 
 npx @modelcontextprotocol/inspector@latest
-arguments - run --with mcp mcp run ./stock_data.py
-Transport Type- STDIO
-
-### Configuration
-
-Update your MCP client configuration to include this server:
-
-```json
-{
-  "mcpServers": {
-    "stock-data": {
-      "command": "python",
-      "args": ["/path/to/stock_data.py"],
-      "env": {
-        "ALPHA_VANTAGE_API_KEY": "your_api_key_here"
-      }
-    }
-  }
-}
 ```
 
-## API Rate Limits
+**Configuration:**
+- **Arguments:** `run --with mcp mcp run ./servers/stock/stock_data.py`
+- **Transport Type:** STDIO
 
-- Alpha Vantage free tier: 25 requests per day
-- Consider upgrading for higher limits if needed
+## 🔒 Security Best Practices
 
-## License
+1. **Never commit API keys:** All `.env` files are gitignored
+2. **Use environment variables:** Store secrets in `.env` files
+3. **Rotate keys regularly:** Generate new API keys periodically
+4. **Review permissions:** Each server only accesses what it needs
+5. **Monitor usage:** Check API usage to detect unauthorized access
+
+## 🛠️ Development
+
+### Adding a New Server
+
+1. Create directory: `servers/your-server/`
+2. Copy template from `servers/stock/stock_data.py`
+3. Update README with server details
+4. Add dependencies to `requirements.txt`
+5. Update main README with server info
+6. Submit pull request
+
+### Project Structure
+
+```
+ClaudeMCP/
+├── servers/           # MCP server implementations
+│   ├── stock/        # Stock market data
+│   ├── weather/      # Weather data
+│   ├── news/         # News aggregation
+│   └── database/     # Database tools
+├── .env.example      # Environment variable template
+├── .gitignore        # Security: prevents committing secrets
+├── requirements.txt  # Python dependencies
+└── README.md         # This file
+```
+
+## 📖 Resources
+
+- [MCP Documentation](https://modelcontextprotocol.io)
+- [MCP Python SDK](https://github.com/anthropics/anthropic-mcp-python)
+- [Claude Desktop](https://claude.ai/download)
+- [MCP Inspector Tool](https://github.com/modelcontextprotocol/inspector)
+
+## 🤝 Contributing
+
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+## 📄 License
 
 This project is open source and available under the MIT License.
+
+## 🙏 Acknowledgments
+
+- Built with [Model Context Protocol](https://modelcontextprotocol.io)
+- Stock data powered by [Alpha Vantage](https://www.alphavantage.co)
+
+## ⭐ Star History
+
+If you find this useful, please star the repository!
+
+---
+
+**Need help?** [Open an issue](https://github.com/HectorHernandez1/ClaudeMCP/issues)
