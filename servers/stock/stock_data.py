@@ -16,6 +16,12 @@ from mcp.server.models import InitializationOptions
 import mcp.server.stdio
 from dotenv import load_dotenv
 
+# Import Brotli to ensure aiohttp can use it for decompression
+try:
+    import brotli
+except ImportError:
+    pass  # Brotli is optional but recommended
+
 load_dotenv()
 
 # Configure logging
