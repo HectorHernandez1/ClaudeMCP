@@ -36,7 +36,8 @@ class StockDataProvider:
     
     async def _ensure_session(self):
         if self.session is None:
-            self.session = aiohttp.ClientSession()
+            # Create session with auto_decompress to handle br encoding
+            self.session = aiohttp.ClientSession(auto_decompress=True)
     
     async def _make_request(self, params: Dict[str, str]) -> Dict[str, Any]:
         await self._ensure_session()
