@@ -13,12 +13,12 @@ The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is an open s
 | Server | Description | Status | API Required |
 |--------|-------------|--------|--------------|
 | [**Stock Data**](servers/stock/) | Real-time stock quotes, company info, historical prices | ✅ Ready | Alpha Vantage (Free) |
+| [**Weather Data**](servers/weather/) | Current weather, forecasts, air quality, alerts | ✅ Ready | OpenWeatherMap (Free) |
 
 ### 🟡 Coming Soon
 
 | Server | Description | API Required |
 |--------|-------------|--------------|
-| **Weather** | Current weather, forecasts, alerts | OpenWeather or WeatherAPI (Free) |
 | **News** | Latest news from multiple sources | NewsAPI (Free) |
 | **Database** | Query PostgreSQL, MySQL, MongoDB | Database credentials |
 
@@ -105,16 +105,35 @@ The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is an open s
 
 ---
 
-### Weather Server _(Coming Soon)_
+### Weather Data Server
 
 **Location:** `servers/weather/`
 
-**Planned Features:**
-- Current weather conditions
-- 5-7 day forecasts
-- Weather alerts
-- Air quality index
-- UV index
+**Features:**
+- Current weather conditions for any location
+- 5-day forecasts with 3-hour intervals
+- Air quality index and pollutant levels
+- Weather alerts and warnings (requires subscription)
+- Location search/geocoding
+- Multi-location weather comparison
+- Metric and imperial unit support
+
+**Setup:**
+1. Get free API key: [openweathermap.org](https://openweathermap.org/api)
+2. Add to `.env`: `OPENWEATHER_API_KEY=your_key`
+3. Configure in Claude Desktop (see above)
+
+**Available Tools:**
+- `get_current_weather` - Current conditions for a location
+- `get_forecast` - 5-day forecast with 3-hour intervals
+- `get_air_quality` - Air quality index and pollutants
+- `search_locations` - Find location coordinates
+- `get_weather_alerts` - Active weather alerts
+- `get_multi_location_weather` - Weather for multiple locations
+
+**Rate Limits:** 60 calls/minute, 1M calls/month (free tier)
+
+[📖 Full Documentation](servers/weather/README.md)
 
 ---
 
@@ -211,6 +230,7 @@ This project is open source and available under the MIT License.
 
 - Built with [Model Context Protocol](https://modelcontextprotocol.io)
 - Stock data powered by [Alpha Vantage](https://www.alphavantage.co)
+- Weather data powered by [OpenWeatherMap](https://openweathermap.org)
 
 ## ⭐ Star History
 
