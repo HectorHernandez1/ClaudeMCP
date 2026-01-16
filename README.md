@@ -14,12 +14,12 @@ The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is an open s
 |--------|-------------|--------|--------------|
 | [**Stock Data**](servers/stock/) | Real-time stock quotes, company info, historical prices | ✅ Ready | Alpha Vantage (Free) |
 | [**Weather Data**](servers/weather/) | Current weather, forecasts, air quality, alerts | ✅ Ready | OpenWeatherMap (Free) |
+| [**News Data**](servers/news/) | Headlines, article search, news sources | ✅ Ready | NewsAPI (Free) |
 
 ### 🟡 Coming Soon
 
 | Server | Description | API Required |
 |--------|-------------|--------------|
-| **News** | Latest news from multiple sources | NewsAPI (Free) |
 | **Database** | Query PostgreSQL, MySQL, MongoDB | Database credentials |
 
 ## 🚀 Quick Start
@@ -137,15 +137,32 @@ The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is an open s
 
 ---
 
-### News Server _(Coming Soon)_
+### News Data Server
 
 **Location:** `servers/news/`
 
-**Planned Features:**
-- Top headlines by category
-- Search articles by keyword
-- Filter by source, language, date
-- RSS feed aggregation
+**Features:**
+- Top headlines by country and category
+- Full-text article search
+- Browse news sources
+- Category news across multiple countries
+- Filter by language, date, source
+
+**Setup:**
+1. Get free API key: [newsapi.org](https://newsapi.org/register)
+2. Add to `.env`: `NEWS_API_KEY=your_key`
+3. Configure in Claude Desktop (see above)
+
+**Available Tools:**
+- `get_top_headlines` - Latest headlines by country/category
+- `search_news` - Search articles by keyword
+- `get_sources` - Browse available news sources
+- `get_headlines_by_source` - Headlines from specific source
+- `get_category_news` - Category news across countries
+
+**Rate Limits:** 100 requests/day (free tier)
+
+[📖 Full Documentation](servers/news/README.md)
 
 ---
 
@@ -231,6 +248,7 @@ This project is open source and available under the MIT License.
 - Built with [Model Context Protocol](https://modelcontextprotocol.io)
 - Stock data powered by [Alpha Vantage](https://www.alphavantage.co)
 - Weather data powered by [OpenWeatherMap](https://openweathermap.org)
+- News data powered by [NewsAPI](https://newsapi.org)
 
 ## ⭐ Star History
 
