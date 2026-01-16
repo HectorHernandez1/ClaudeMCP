@@ -1,90 +1,120 @@
-# Database MCP Server
+# Personal Finance Database MCP Server
 
-🚧 **Coming Soon** 🚧
+Query your `money_stuff` PostgreSQL database for spending tracking and analysis.
 
-Query and manage databases safely from Claude.
+## Status: Ready
 
-## Planned Features
+This server connects to the PersonalFinanceHub database schema (`budget_app`) and provides read-only access to your financial data.
 
-- Execute safe SELECT queries
-- Schema inspection and browsing
-- Connection pooling
-- Query building assistance
-- Results pagination
-- CSV/JSON export
-- Query history
-- Read-only mode by default
+## Features
 
-## Planned Database Support
+- **Graceful Connection Handling**: If the database is unavailable (e.g., you're away from home), the server returns helpful error messages instead of crashing. Claude Code continues working normally.
+- **Read-Only**: Only SELECT queries allowed - your data is safe
+- **Pre-built Financial Queries**: Spending summaries, category breakdowns, monthly totals
+- **Custom Queries**: Execute your own SELECT queries for advanced analysis
 
-- PostgreSQL
-- MySQL / MariaDB
-- MongoDB
-- SQLite
-- Redis (planned)
+## Available Tools
 
-## Expected Tools
+| Tool | Description |
+|------|-------------|
+| `get_spending_summary` | Spending by category for a date range |
+| `get_recent_transactions` | Recent transactions with filters |
+| `get_monthly_totals` | Total spending by month |
+| `get_category_breakdown` | Detailed category analysis with percentages |
+| `search_transactions` | Search by description text |
+| `list_categories` | All spending categories |
+| `list_persons` | All persons in database |
+| `list_accounts` | All account types |
+| `get_database_status` | Connection status and basic stats |
+| `execute_select_query` | Custom SELECT queries (advanced) |
 
-- `execute_query` - Run SELECT queries safely
-- `describe_table` - Get table schema
-- `list_tables` - List all tables in database
-- `list_databases` - List available databases
-- `get_table_preview` - Sample rows from table
-- `export_results` - Export query results as CSV/JSON
+## Setup
 
-## Security Features
+### 1. Install Dependencies
 
-- Read-only by default
-- SQL injection prevention
-- Query whitelisting option
-- Connection encryption
-- Credential management
-- Query timeout limits
+```bash
+pip install asyncpg
+# Or install all project dependencies:
+pip install -r requirements.txt
+```
 
-## Configuration
+### 2. Configure Environment Variables
+
+Add to your `.env` file:
+
+```bash
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=money_stuff
+DB_USER=your_postgres_username
+DB_PASSWORD=your_postgres_password
+```
+
+### 3. Add to Claude Desktop
+
+Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
 
 ```json
 {
-  "database": {
-    "command": "python",
-    "args": ["/path/to/db_server.py"],
-    "env": {
-      "DB_TYPE": "postgresql",
-      "DB_HOST": "localhost",
-      "DB_PORT": "5432",
-      "DB_NAME": "mydb",
-      "DB_USER": "readonly_user",
-      "DB_PASSWORD": "secure_password",
-      "DB_READ_ONLY": "true"
+  "mcpServers": {
+    "finance-database": {
+      "command": "python",
+      "args": ["/Users/hectorhernandez/Desktop/repo/ClaudeMCP/servers/database/finance_db.py"],
+      "env": {
+        "DB_HOST": "localhost",
+        "DB_PORT": "5432",
+        "DB_NAME": "money_stuff",
+        "DB_USER": "your_username",
+        "DB_PASSWORD": "your_password"
+      }
     }
   }
 }
 ```
 
-## Safety Considerations
+## Database Schema
 
-⚠️ **Important Security Notes:**
+This server expects the `budget_app` schema from [PersonalFinanceHub](https://github.com/HectorHernandez1/PersonalFinanceHub):
 
-- Only use read-only database users
-- Never expose production databases directly
-- Use connection pooling to prevent exhaustion
-- Implement query timeouts
-- Whitelist allowed tables/schemas
-- Monitor query logs
+- `budget_app.persons` - User identity records
+- `budget_app.spending_categories` - Transaction categories
+- `budget_app.account_type` - Card/account types
+- `budget_app.transactions` - Primary transaction table
 
-## Want to Help?
+## What Happens When Database is Unavailable?
 
-This server hasn't been implemented yet. Contributions welcome!
+When you're away from home or the database server is down:
 
-1. Check out the [stock server](../stock/) as a template
-2. Review the [Model Context Protocol docs](https://modelcontextprotocol.io)
-3. Consider security implications carefully
-4. Submit a pull request
+1. The MCP server **does not crash**
+2. Tool calls return a helpful JSON error:
+   ```json
+   {
+     "error": true,
+     "message": "Cannot connect to PostgreSQL at localhost:5432...",
+     "hint": "The database may be unavailable. This won't break Claude Code - other tools continue working normally."
+   }
+   ```
+3. All other MCP servers (stock, weather, news) continue working
+4. Claude can still help you with other tasks
 
-## Estimated Timeline
+## Example Usage
 
-Target completion: Q2 2026
+Ask Claude things like:
 
----
+- "How much did I spend on groceries this month?"
+- "Show me my top spending categories for 2024"
+- "What were my largest transactions last week?"
+- "Compare my monthly spending over the past 6 months"
+- "Search for all Amazon transactions"
 
-**Status:** 🟡 Planned | **Priority:** High | **Difficulty:** High | **Security:** ⚠️ Critical
+## Security
+
+- **Read-only by default**: Only SELECT queries are allowed
+- **SQL injection prevention**: Parameterized queries throughout
+- **Dangerous keyword blocking**: INSERT, UPDATE, DELETE, DROP, etc. are blocked
+- **Query timeout**: 30-second limit prevents runaway queries
+
+## Files
+
+- `finance_db.py` - Main MCP server implementation
+- `README.md` - This documentation
