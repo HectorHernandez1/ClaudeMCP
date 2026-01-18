@@ -28,8 +28,10 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Database configuration from environment
+# SECURITY: Only localhost connections allowed - no remote database access
+ALLOWED_HOST = "localhost"
 DB_CONFIG = {
-    "host": os.getenv("DB_HOST", "localhost"),
+    "host": ALLOWED_HOST,  # Fixed to localhost for security
     "port": int(os.getenv("DB_PORT", "5432")),
     "database": os.getenv("DB_NAME", "money_stuff"),
     "user": os.getenv("DB_USER", ""),

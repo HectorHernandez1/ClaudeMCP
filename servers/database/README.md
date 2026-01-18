@@ -8,6 +8,7 @@ This server connects to the PersonalFinanceHub database schema (`budget_app`) an
 
 ## Features
 
+- **Localhost Only**: Connects only to localhost databases - cannot access remote servers for security
 - **Graceful Connection Handling**: If the database is unavailable (e.g., you're away from home), the server returns helpful error messages instead of crashing. Claude Code continues working normally.
 - **Read-Only**: Only SELECT queries allowed - your data is safe
 - **Pre-built Financial Queries**: Spending summaries, category breakdowns, monthly totals
@@ -43,7 +44,7 @@ pip install -r requirements.txt
 Add to your `.env` file:
 
 ```bash
-DB_HOST=localhost
+# Note: DB_HOST is hardcoded to localhost for security
 DB_PORT=5432
 DB_NAME=money_stuff
 DB_USER=your_postgres_username
@@ -61,7 +62,6 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
       "command": "python",
       "args": ["/Users/hectorhernandez/Desktop/repo/ClaudeMCP/servers/database/finance_db.py"],
       "env": {
-        "DB_HOST": "localhost",
         "DB_PORT": "5432",
         "DB_NAME": "money_stuff",
         "DB_USER": "your_username",
@@ -109,6 +109,7 @@ Ask Claude things like:
 
 ## Security
 
+- **Localhost only**: Hard-coded to connect only to localhost - cannot access databases on other servers in the network
 - **Read-only by default**: Only SELECT queries are allowed
 - **SQL injection prevention**: Parameterized queries throughout
 - **Dangerous keyword blocking**: INSERT, UPDATE, DELETE, DROP, etc. are blocked

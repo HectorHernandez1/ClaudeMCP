@@ -15,12 +15,7 @@ The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is an open s
 | [**Stock Data**](servers/stock/) | Real-time stock quotes, company info, historical prices | ✅ Ready | Alpha Vantage (Free) |
 | [**Weather Data**](servers/weather/) | Current weather, forecasts, air quality, alerts | ✅ Ready | OpenWeatherMap (Free) |
 | [**News Data**](servers/news/) | Headlines, article search, news sources | ✅ Ready | NewsAPI (Free) |
-
-### 🟡 Coming Soon
-
-| Server | Description | API Required |
-|--------|-------------|--------------|
-| **Database** | Query PostgreSQL, MySQL, MongoDB | Database credentials |
+| [**Database**](servers/database/) | Query PostgreSQL personal finance database (localhost only) | ✅ Ready | PostgreSQL credentials |
 
 ## 🚀 Quick Start
 
@@ -166,15 +161,40 @@ The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is an open s
 
 ---
 
-### Database Server _(Coming Soon)_
+### Database Server
 
 **Location:** `servers/database/`
 
-**Planned Features:**
-- Query PostgreSQL, MySQL, MongoDB
-- Execute safe read queries
-- Schema inspection
-- Connection pooling
+**Features:**
+- Query PostgreSQL personal finance database
+- Localhost-only connections (secure by design)
+- Read-only SELECT queries
+- Spending summaries and category breakdowns
+- Transaction search and filtering
+- Monthly totals and trends
+- Graceful error handling when database unavailable
+
+**Setup:**
+1. Install PostgreSQL and create `money_stuff` database
+2. Set up schema from [PersonalFinanceHub](https://github.com/HectorHernandez1/PersonalFinanceHub)
+3. Add to `.env`: Database credentials (DB_PORT, DB_NAME, DB_USER, DB_PASSWORD)
+4. Configure in Claude Desktop (see above)
+
+**Available Tools:**
+- `get_spending_summary` - Spending by category for date range
+- `get_recent_transactions` - Filtered transaction list
+- `get_monthly_totals` - Monthly spending trends
+- `get_category_breakdown` - Category analysis with percentages
+- `search_transactions` - Search by description
+- `list_categories` - All spending categories
+- `list_persons` - All persons in database
+- `list_accounts` - All account types
+- `get_database_status` - Connection status
+- `execute_select_query` - Custom SELECT queries
+
+**Security:** Localhost-only connections, read-only queries, SQL injection protection
+
+[📖 Full Documentation](servers/database/README.md)
 
 ## 🧪 Testing
 
