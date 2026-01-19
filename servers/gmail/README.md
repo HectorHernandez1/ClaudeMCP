@@ -40,10 +40,18 @@ pip install -r requirements.txt
 4. Create OAuth credentials:
    - Go to "APIs & Services" > "Credentials"
    - Click "Create Credentials" > "OAuth client ID"
-   - Choose "Desktop app" as application type
+   - **IMPORTANT**: Choose "Desktop app" as application type (NOT "Web application")
+   - Click "Create"
    - Download the JSON file
-5. Rename the downloaded file to `credentials.json`
-6. Place it in `servers/gmail/credentials.json`
+5. (Optional but recommended) Configure authorized redirect URIs:
+   - Click on your OAuth client ID to edit it
+   - Under "Authorized redirect URIs", add these three URIs:
+     - `http://localhost:8080/`
+     - `http://localhost:63228/`
+     - `http://localhost/`
+   - Click "Save"
+6. Rename the downloaded file to `credentials.json`
+7. Place it in `servers/gmail/credentials.json`
 
 ### 3. Configure Claude Desktop
 
@@ -185,6 +193,12 @@ Combine with AND/OR:
 **"Access blocked" during OAuth**
 - Your app needs to be verified by Google for production use
 - For personal use, click "Advanced" > "Go to [app name] (unsafe)"
+
+**"Error 403: access_denied" during OAuth**
+- Make sure your OAuth client type is "Desktop app" (not "Web application")
+- Add redirect URIs to your OAuth client: http://localhost:8080/, http://localhost:63228/, http://localhost/
+- Delete `token.json` and try again
+- Restart Claude Desktop
 
 **Rate limit errors**
 - The Gmail API has quotas - wait a few seconds between large operations

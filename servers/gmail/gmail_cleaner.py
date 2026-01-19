@@ -66,10 +66,37 @@ def get_gmail_service():
     # If no valid credentials, get new ones
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
+            try:
+                creds.refresh(Request())
+            except Exception as e:
+                logger.error(f"Failed to refresh token: {e}")
+                # Delete invalid token and require re-auth
+                if os.path.exists(TOKEN_FILE):
+                    os.remove(TOKEN_FILE)
+                raise RuntimeError(
+                    "Token refresh failed. Please delete token.json and re-authenticate. "
+                    "Make sure your OAuth app has the correct redirect URIs configured: "
+                    "http://localhost:8080/, http://localhost:63228/, http://localhost/"
+                )
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRETS_FILE, SCOPES)
-            creds = flow.run_local_server(port=0)
+            try:
+                flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRETS_FILE, SCOPES)
+                # Try to use a fixed port first
+                try:
+                    creds = flow.run_local_server(port=8080, prompt='consent')
+                except OSError:
+                    # If port 8080 is busy, use random port
+                    creds = flow.run_local_server(port=0, prompt='consent')
+            except Exception as e:
+                logger.error(f"OAuth flow failed: {e}")
+                raise RuntimeError(
+                    f"OAuth authentication failed: {e}\n\n"
+                    "Please ensure:\n"
+                    "1. Your OAuth client is configured as 'Desktop app'\n"
+                    "2. Redirect URIs include: http://localhost:8080/, http://localhost:63228/, http://localhost/\n"
+                    "3. Gmail API is enabled in your Google Cloud project\n\n"
+                    "See README.md for detailed setup instructions."
+                )
 
         # Save the credentials
         with open(TOKEN_FILE, 'w') as token:
