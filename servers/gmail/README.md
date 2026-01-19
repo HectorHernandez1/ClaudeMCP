@@ -37,21 +37,22 @@ pip install -r requirements.txt
    - Go to "APIs & Services" > "Library"
    - Search for "Gmail API"
    - Click "Enable"
-4. Create OAuth credentials:
+4. Configure OAuth consent screen and test users:
+   - Go to "OAuth consent screen" in the left sidebar
+   - Configure app name, user support email, developer contact
+   - Under "Test users", click "+ ADD USERS"
+   - Add your Gmail address (the one you'll use with the MCP server)
+   - Click "Save"
+5. Create OAuth credentials:
    - Go to "APIs & Services" > "Credentials"
    - Click "Create Credentials" > "OAuth client ID"
    - **IMPORTANT**: Choose "Desktop app" as application type (NOT "Web application")
    - Click "Create"
    - Download the JSON file
-5. (Optional but recommended) Configure authorized redirect URIs:
-   - Click on your OAuth client ID to edit it
-   - Under "Authorized redirect URIs", add these three URIs:
-     - `http://localhost:8080/`
-     - `http://localhost:63228/`
-     - `http://localhost/`
-   - Click "Save"
 6. Rename the downloaded file to `credentials.json`
 7. Place it in `servers/gmail/credentials.json`
+
+**Important**: You must add yourself as a test user (step 4) or you'll get a 403 error during OAuth!
 
 ### 3. Configure Claude Desktop
 
@@ -195,8 +196,10 @@ Combine with AND/OR:
 - For personal use, click "Advanced" > "Go to [app name] (unsafe)"
 
 **"Error 403: access_denied" during OAuth**
+- Most common cause: You haven't added yourself as a test user in the OAuth consent screen
+- Go to OAuth consent screen > Test users > + ADD USERS
+- Add your Gmail address and save
 - Make sure your OAuth client type is "Desktop app" (not "Web application")
-- Add redirect URIs to your OAuth client: http://localhost:8080/, http://localhost:63228/, http://localhost/
 - Delete `token.json` and try again
 - Restart Claude Desktop
 
