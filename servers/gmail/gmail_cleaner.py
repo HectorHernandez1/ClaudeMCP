@@ -306,6 +306,8 @@ async def handle_call_tool(
             query = args.get("query", "")
             max_delete = min(args.get("max_delete", 50), 100)
 
+            logger.info(f"Searching for emails to delete with query: '{query}', max_delete: {max_delete}")
+
             result = gmail.users().messages().list(
                 userId='me',
                 q=query,
@@ -313,24 +315,39 @@ async def handle_call_tool(
             ).execute()
 
             messages = result.get('messages', [])
+            logger.info(f"Found {len(messages)} messages matching query")
 
             if not messages:
                 return [types.TextContent(
                     type="text",
-                    text=f"No emails found to delete matching query: '{query}'"
+                    text=json.dumps({
+                        "found": 0,
+                        "deleted": 0,
+                        "query": query,
+                        "message": "No emails found matching this query. Try using 'search_emails' first to verify emails exist.",
+                        "hint": "For 5+ year old emails, try: 'before:2020/01/01' or 'older_than:1825d'"
+                    }, indent=2)
                 )]
 
             deleted_count = 0
+            failed_count = 0
             for msg in messages:
                 try:
                     gmail.users().messages().delete(userId='me', id=msg['id']).execute()
                     deleted_count += 1
+                    logger.info(f"Deleted message {msg['id']}")
                 except Exception as e:
+                    failed_count += 1
                     logger.error(f"Failed to delete message {msg['id']}: {e}")
 
             return [types.TextContent(
                 type="text",
-                text=f"Successfully deleted {deleted_count} emails matching query: '{query}'"
+                text=json.dumps({
+                    "found": len(messages),
+                    "deleted": deleted_count,
+                    "failed": failed_count,
+                    "query": query
+                }, indent=2)
             )]
 
         elif name == "star_emails":
