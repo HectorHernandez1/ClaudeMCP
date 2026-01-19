@@ -1,0 +1,6 @@
+# Google OAuth credentials - keep these private!
+credentials.json
+token.json
+
+# Backup files
+*.bak

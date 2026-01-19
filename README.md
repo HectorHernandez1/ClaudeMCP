@@ -16,6 +16,7 @@ The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is an open s
 | [**Weather Data**](servers/weather/) | Current weather, forecasts, air quality, alerts | ✅ Ready | OpenWeatherMap (Free) |
 | [**News Data**](servers/news/) | Headlines, article search, news sources | ✅ Ready | NewsAPI (Free) |
 | [**Database**](servers/database/) | Query PostgreSQL personal finance database (localhost only) | ✅ Ready | PostgreSQL credentials |
+| [**Gmail**](servers/gmail/) | Search, delete, star, archive, and manage Gmail emails | ✅ Ready | Google OAuth credentials |
 
 ## 🚀 Quick Start
 
@@ -195,6 +196,45 @@ The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is an open s
 **Security:** Localhost-only connections, read-only queries, SQL injection protection
 
 [📖 Full Documentation](servers/database/README.md)
+
+---
+
+### Gmail Server
+
+**Location:** `servers/gmail/`
+
+**Features:**
+- Search emails with Gmail query syntax
+- Delete, star, and archive emails
+- Mark emails as read/unread
+- Get detailed email information
+- Safe deletion limits to prevent accidents
+
+**Setup:**
+1. Install Google API libraries: `pip install google-api-python-client google-auth-oauthlib google-auth-httplib2`
+2. Get OAuth credentials from [Google Cloud Console](https://console.cloud.google.com/)
+3. Enable Gmail API for your project
+4. Download credentials as `servers/gmail/credentials.json`
+5. Configure in Claude Desktop (see above)
+6. First run will open browser for OAuth authorization
+
+**Available Tools:**
+- `search_emails` - Search with Gmail query syntax
+- `delete_emails` - Permanently delete emails (max 50 default)
+- `star_emails` / `unstar_emails` - Flag important emails
+- `mark_as_read` / `mark_as_unread` - Manage read status
+- `archive_emails` - Remove from inbox
+- `get_email_details` - Get full email details by ID
+
+**Search Examples:**
+- `subject:Invoice` - Emails with "Invoice" in subject
+- `from:example@gmail.com` - From specific sender
+- `is:unread older_than:30d` - Old unread emails
+- `has:attachment larger:5M` - Large attachments
+
+**Security:** OAuth authentication, read-modify access only (can't send emails), credentials stored locally
+
+[📖 Full Documentation](servers/gmail/README.md)
 
 ## 🧪 Testing
 
