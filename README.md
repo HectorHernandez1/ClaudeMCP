@@ -275,7 +275,8 @@ ClaudeMCP/
 │   ├── stock/        # Stock market data
 │   ├── weather/      # Weather data
 │   ├── news/         # News aggregation
-│   └── database/     # Database tools
+│   ├── database/     # Database tools
+│   └── gmail/        # Gmail email management
 ├── .env.example      # Environment variable template
 ├── .gitignore        # Security: prevents committing secrets
 ├── requirements.txt  # Python dependencies
