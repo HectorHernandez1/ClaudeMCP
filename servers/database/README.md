@@ -60,7 +60,7 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
   "mcpServers": {
     "finance-database": {
       "command": "python",
-      "args": ["/Users/hectorhernandez/Desktop/repo/ClaudeMCP/servers/database/finance_db.py"],
+      "args": ["/path/to/ClaudeMCP/servers/database/finance_db.py"],
       "env": {
         "DB_PORT": "5432",
         "DB_NAME": "money_stuff",
