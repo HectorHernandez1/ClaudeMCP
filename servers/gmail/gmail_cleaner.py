@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """
 Gmail MCP Server
-Manage Gmail: search, delete, star/flag emails, mark as read/unread.
+Manage Gmail: search, read, send, delete, star/flag emails, mark as read/unread.
 
 Requires Google OAuth credentials from Google Cloud Console.
 """
 
 import os
 import logging
+import base64
 from typing import Any, List, Union
 import asyncio
 import json
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from mcp import server, types
 from mcp.server import Server, NotificationOptions
 from mcp.server.models import InitializationOptions
@@ -21,7 +24,13 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Configuration
-SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
+# gmail.modify: read, compose, trash, label management
+# gmail.send: send emails
+# https://mail.google.com/: full access including permanent delete
+SCOPES = [
+    'https://mail.google.com/',
+    'https://www.googleapis.com/auth/gmail.send',
+]
 CLIENT_SECRETS_FILE = os.path.join(os.path.dirname(__file__), 'credentials.json')
 TOKEN_FILE = os.path.join(os.path.dirname(__file__), 'token.json')
 
@@ -70,22 +79,17 @@ def get_gmail_service():
                 creds.refresh(Request())
             except Exception as e:
                 logger.error(f"Failed to refresh token: {e}")
-                # Delete invalid token and require re-auth
                 if os.path.exists(TOKEN_FILE):
                     os.remove(TOKEN_FILE)
                 raise RuntimeError(
-                    "Token refresh failed. Please delete token.json and re-authenticate. "
-                    "Make sure your OAuth app has the correct redirect URIs configured: "
-                    "http://localhost:8080/, http://localhost:63228/, http://localhost/"
+                    "Token refresh failed. Deleted token.json - please restart to re-authenticate."
                 )
         else:
             try:
                 flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRETS_FILE, SCOPES)
-                # Try to use a fixed port first
                 try:
                     creds = flow.run_local_server(port=8080, prompt='consent')
                 except OSError:
-                    # If port 8080 is busy, use random port
                     creds = flow.run_local_server(port=0, prompt='consent')
             except Exception as e:
                 logger.error(f"OAuth flow failed: {e}")
@@ -93,12 +97,11 @@ def get_gmail_service():
                     f"OAuth authentication failed: {e}\n\n"
                     "Please ensure:\n"
                     "1. Your OAuth client is configured as 'Desktop app'\n"
-                    "2. Redirect URIs include: http://localhost:8080/, http://localhost:63228/, http://localhost/\n"
-                    "3. Gmail API is enabled in your Google Cloud project\n\n"
+                    "2. Gmail API is enabled in your Google Cloud project\n"
+                    "3. You added yourself as a test user in OAuth consent screen\n\n"
                     "See README.md for detailed setup instructions."
                 )
 
-        # Save the credentials
         with open(TOKEN_FILE, 'w') as token:
             token.write(creds.to_json())
 
@@ -107,29 +110,150 @@ def get_gmail_service():
     return _gmail_service
 
 
+def _get_email_body(payload):
+    """Extract plain text body from email payload, handling multipart messages."""
+    body = ""
+
+    if payload.get('mimeType') == 'text/plain' and payload.get('body', {}).get('data'):
+        body = base64.urlsafe_b64decode(payload['body']['data']).decode('utf-8', errors='replace')
+    elif payload.get('mimeType', '').startswith('multipart/'):
+        for part in payload.get('parts', []):
+            if part.get('mimeType') == 'text/plain' and part.get('body', {}).get('data'):
+                body = base64.urlsafe_b64decode(part['body']['data']).decode('utf-8', errors='replace')
+                break
+            elif part.get('mimeType', '').startswith('multipart/'):
+                # Nested multipart
+                body = _get_email_body(part)
+                if body:
+                    break
+
+    return body
+
+
+def _make_response(data):
+    """Create a JSON text response."""
+    return [types.TextContent(type="text", text=json.dumps(data, indent=2))]
+
+
+def _search_messages(gmail, query, max_results=100):
+    """Search for messages and return all IDs, handling pagination."""
+    all_messages = []
+    result = gmail.users().messages().list(
+        userId='me', q=query, maxResults=min(max_results, 500)
+    ).execute()
+
+    all_messages.extend(result.get('messages', []))
+
+    while 'nextPageToken' in result and len(all_messages) < max_results:
+        result = gmail.users().messages().list(
+            userId='me', q=query,
+            maxResults=min(max_results - len(all_messages), 500),
+            pageToken=result['nextPageToken']
+        ).execute()
+        all_messages.extend(result.get('messages', []))
+
+    return all_messages[:max_results]
+
+
 @app.list_tools()
 async def handle_list_tools() -> List[types.Tool]:
     """List available Gmail tools."""
     return [
         types.Tool(
             name="search_emails",
-            description="Search for emails using Gmail query syntax (e.g., 'subject:Invoice from:sender@example.com')",
+            description="Search for emails using Gmail query syntax",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "Gmail search query. Examples: 'subject:Invoice', 'from:example.com', 'is:unread older_than:30d'",
+                        "description": "Gmail search query. Examples: 'subject:Invoice', 'from:example.com', 'is:unread older_than:30d', 'before:2020/01/01'",
                     },
                     "max_results": {
                         "type": "integer",
-                        "description": "Maximum number of results to return (default 20, max 100)",
+                        "description": "Maximum number of results (default 20, max 100)",
                         "default": 20,
                     },
-                    "include_snippet": {
-                        "type": "boolean",
-                        "description": "Include email snippet/preview in results (default true)",
-                        "default": True,
+                },
+                "required": ["query"],
+            },
+        ),
+        types.Tool(
+            name="read_email",
+            description="Read the full content of an email by ID (use search_emails first to find IDs)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "email_id": {
+                        "type": "string",
+                        "description": "Gmail message ID from search results",
+                    },
+                },
+                "required": ["email_id"],
+            },
+        ),
+        types.Tool(
+            name="send_email",
+            description="Send an email from your Gmail account",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "to": {
+                        "type": "string",
+                        "description": "Recipient email address (comma-separated for multiple)",
+                    },
+                    "subject": {
+                        "type": "string",
+                        "description": "Email subject line",
+                    },
+                    "body": {
+                        "type": "string",
+                        "description": "Email body text (plain text)",
+                    },
+                    "cc": {
+                        "type": "string",
+                        "description": "CC recipients (comma-separated, optional)",
+                    },
+                    "bcc": {
+                        "type": "string",
+                        "description": "BCC recipients (comma-separated, optional)",
+                    },
+                },
+                "required": ["to", "subject", "body"],
+            },
+        ),
+        types.Tool(
+            name="reply_to_email",
+            description="Reply to an existing email thread",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "email_id": {
+                        "type": "string",
+                        "description": "Gmail message ID to reply to",
+                    },
+                    "body": {
+                        "type": "string",
+                        "description": "Reply body text",
+                    },
+                },
+                "required": ["email_id", "body"],
+            },
+        ),
+        types.Tool(
+            name="trash_emails",
+            description="Move emails to trash (recoverable for 30 days)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Gmail search query to find emails to trash",
+                    },
+                    "max_trash": {
+                        "type": "integer",
+                        "description": "Maximum number of emails to trash (default 50, max 500)",
+                        "default": 50,
                     },
                 },
                 "required": ["query"],
@@ -137,17 +261,17 @@ async def handle_list_tools() -> List[types.Tool]:
         ),
         types.Tool(
             name="delete_emails",
-            description="Permanently delete emails matching a search query (use with caution!)",
+            description="PERMANENTLY delete emails (cannot be recovered! Use trash_emails instead for safe deletion)",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "Gmail search query to find emails to delete",
+                        "description": "Gmail search query to find emails to permanently delete",
                     },
                     "max_delete": {
                         "type": "integer",
-                        "description": "Maximum number of emails to delete (safety limit, default 50)",
+                        "description": "Maximum number of emails to delete (default 50, max 500)",
                         "default": 50,
                     },
                 },
@@ -170,7 +294,7 @@ async def handle_list_tools() -> List[types.Tool]:
         ),
         types.Tool(
             name="unstar_emails",
-            description="Remove star/flag from emails matching a search query",
+            description="Remove star from emails matching a search query",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -212,7 +336,7 @@ async def handle_list_tools() -> List[types.Tool]:
         ),
         types.Tool(
             name="archive_emails",
-            description="Archive emails (remove from inbox) matching a search query",
+            description="Archive emails (remove from inbox)",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -222,20 +346,6 @@ async def handle_list_tools() -> List[types.Tool]:
                     },
                 },
                 "required": ["query"],
-            },
-        ),
-        types.Tool(
-            name="get_email_details",
-            description="Get full details of a specific email by ID",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "email_id": {
-                        "type": "string",
-                        "description": "Gmail message ID",
-                    },
-                },
-                "required": ["email_id"],
             },
         ),
     ]
@@ -252,308 +362,319 @@ async def handle_call_tool(
     try:
         gmail = get_gmail_service()
 
+        # --- SEARCH ---
         if name == "search_emails":
             query = args.get("query", "")
             max_results = min(args.get("max_results", 20), 100)
-            include_snippet = args.get("include_snippet", True)
 
-            result = gmail.users().messages().list(
-                userId='me',
-                q=query,
-                maxResults=max_results
-            ).execute()
-
-            messages = result.get('messages', [])
+            messages = _search_messages(gmail, query, max_results)
 
             if not messages:
-                return [types.TextContent(
-                    type="text",
-                    text=f"No emails found matching query: '{query}'"
-                )]
+                return _make_response({"query": query, "count": 0, "emails": []})
 
             email_details = []
             for msg in messages:
-                if include_snippet:
-                    full_msg = gmail.users().messages().get(
-                        userId='me',
-                        id=msg['id'],
-                        format='metadata',
-                        metadataHeaders=['From', 'Subject', 'Date']
-                    ).execute()
+                full_msg = gmail.users().messages().get(
+                    userId='me', id=msg['id'],
+                    format='metadata',
+                    metadataHeaders=['From', 'To', 'Subject', 'Date']
+                ).execute()
 
-                    headers = {h['name']: h['value'] for h in full_msg.get('payload', {}).get('headers', [])}
+                headers = {h['name']: h['value'] for h in full_msg.get('payload', {}).get('headers', [])}
 
-                    email_details.append({
-                        "id": msg['id'],
-                        "from": headers.get('From', 'Unknown'),
-                        "subject": headers.get('Subject', 'No Subject'),
-                        "date": headers.get('Date', 'Unknown'),
-                        "snippet": full_msg.get('snippet', '')
-                    })
-                else:
-                    email_details.append({"id": msg['id']})
+                email_details.append({
+                    "id": msg['id'],
+                    "from": headers.get('From', 'Unknown'),
+                    "to": headers.get('To', 'Unknown'),
+                    "subject": headers.get('Subject', 'No Subject'),
+                    "date": headers.get('Date', 'Unknown'),
+                    "snippet": full_msg.get('snippet', ''),
+                    "labels": full_msg.get('labelIds', [])
+                })
 
-            return [types.TextContent(
-                type="text",
-                text=json.dumps({
-                    "query": query,
-                    "count": len(messages),
-                    "emails": email_details
-                }, indent=2)
-            )]
+            return _make_response({"query": query, "count": len(email_details), "emails": email_details})
 
-        elif name == "delete_emails":
-            query = args.get("query", "")
-            max_delete = min(args.get("max_delete", 50), 100)
-
-            logger.info(f"Searching for emails to delete with query: '{query}', max_delete: {max_delete}")
-
-            result = gmail.users().messages().list(
-                userId='me',
-                q=query,
-                maxResults=max_delete
-            ).execute()
-
-            messages = result.get('messages', [])
-            logger.info(f"Found {len(messages)} messages matching query")
-
-            if not messages:
-                return [types.TextContent(
-                    type="text",
-                    text=json.dumps({
-                        "found": 0,
-                        "deleted": 0,
-                        "query": query,
-                        "message": "No emails found matching this query. Try using 'search_emails' first to verify emails exist.",
-                        "hint": "For 5+ year old emails, try: 'before:2020/01/01' or 'older_than:1825d'"
-                    }, indent=2)
-                )]
-
-            deleted_count = 0
-            failed_count = 0
-            for msg in messages:
-                try:
-                    gmail.users().messages().delete(userId='me', id=msg['id']).execute()
-                    deleted_count += 1
-                    logger.info(f"Deleted message {msg['id']}")
-                except Exception as e:
-                    failed_count += 1
-                    logger.error(f"Failed to delete message {msg['id']}: {e}")
-
-            return [types.TextContent(
-                type="text",
-                text=json.dumps({
-                    "found": len(messages),
-                    "deleted": deleted_count,
-                    "failed": failed_count,
-                    "query": query
-                }, indent=2)
-            )]
-
-        elif name == "star_emails":
-            query = args.get("query", "")
-
-            result = gmail.users().messages().list(userId='me', q=query).execute()
-            messages = result.get('messages', [])
-
-            if not messages:
-                return [types.TextContent(
-                    type="text",
-                    text=f"No emails found to star matching query: '{query}'"
-                )]
-
-            starred_count = 0
-            for msg in messages:
-                try:
-                    gmail.users().messages().modify(
-                        userId='me',
-                        id=msg['id'],
-                        body={"addLabelIds": ["STARRED"]}
-                    ).execute()
-                    starred_count += 1
-                except Exception as e:
-                    logger.error(f"Failed to star message {msg['id']}: {e}")
-
-            return [types.TextContent(
-                type="text",
-                text=f"Successfully starred {starred_count} emails matching query: '{query}'"
-            )]
-
-        elif name == "unstar_emails":
-            query = args.get("query", "")
-
-            result = gmail.users().messages().list(userId='me', q=query).execute()
-            messages = result.get('messages', [])
-
-            if not messages:
-                return [types.TextContent(
-                    type="text",
-                    text=f"No emails found to unstar matching query: '{query}'"
-                )]
-
-            unstarred_count = 0
-            for msg in messages:
-                try:
-                    gmail.users().messages().modify(
-                        userId='me',
-                        id=msg['id'],
-                        body={"removeLabelIds": ["STARRED"]}
-                    ).execute()
-                    unstarred_count += 1
-                except Exception as e:
-                    logger.error(f"Failed to unstar message {msg['id']}: {e}")
-
-            return [types.TextContent(
-                type="text",
-                text=f"Successfully unstarred {unstarred_count} emails matching query: '{query}'"
-            )]
-
-        elif name == "mark_as_read":
-            query = args.get("query", "")
-
-            result = gmail.users().messages().list(userId='me', q=query).execute()
-            messages = result.get('messages', [])
-
-            if not messages:
-                return [types.TextContent(
-                    type="text",
-                    text=f"No emails found to mark as read matching query: '{query}'"
-                )]
-
-            marked_count = 0
-            for msg in messages:
-                try:
-                    gmail.users().messages().modify(
-                        userId='me',
-                        id=msg['id'],
-                        body={"removeLabelIds": ["UNREAD"]}
-                    ).execute()
-                    marked_count += 1
-                except Exception as e:
-                    logger.error(f"Failed to mark message {msg['id']} as read: {e}")
-
-            return [types.TextContent(
-                type="text",
-                text=f"Successfully marked {marked_count} emails as read matching query: '{query}'"
-            )]
-
-        elif name == "mark_as_unread":
-            query = args.get("query", "")
-
-            result = gmail.users().messages().list(userId='me', q=query).execute()
-            messages = result.get('messages', [])
-
-            if not messages:
-                return [types.TextContent(
-                    type="text",
-                    text=f"No emails found to mark as unread matching query: '{query}'"
-                )]
-
-            marked_count = 0
-            for msg in messages:
-                try:
-                    gmail.users().messages().modify(
-                        userId='me',
-                        id=msg['id'],
-                        body={"addLabelIds": ["UNREAD"]}
-                    ).execute()
-                    marked_count += 1
-                except Exception as e:
-                    logger.error(f"Failed to mark message {msg['id']} as unread: {e}")
-
-            return [types.TextContent(
-                type="text",
-                text=f"Successfully marked {marked_count} emails as unread matching query: '{query}'"
-            )]
-
-        elif name == "archive_emails":
-            query = args.get("query", "")
-
-            result = gmail.users().messages().list(userId='me', q=query).execute()
-            messages = result.get('messages', [])
-
-            if not messages:
-                return [types.TextContent(
-                    type="text",
-                    text=f"No emails found to archive matching query: '{query}'"
-                )]
-
-            archived_count = 0
-            for msg in messages:
-                try:
-                    gmail.users().messages().modify(
-                        userId='me',
-                        id=msg['id'],
-                        body={"removeLabelIds": ["INBOX"]}
-                    ).execute()
-                    archived_count += 1
-                except Exception as e:
-                    logger.error(f"Failed to archive message {msg['id']}: {e}")
-
-            return [types.TextContent(
-                type="text",
-                text=f"Successfully archived {archived_count} emails matching query: '{query}'"
-            )]
-
-        elif name == "get_email_details":
+        # --- READ ---
+        elif name == "read_email":
             email_id = args.get("email_id", "")
 
             msg = gmail.users().messages().get(
-                userId='me',
-                id=email_id,
-                format='full'
+                userId='me', id=email_id, format='full'
             ).execute()
 
             headers = {h['name']: h['value'] for h in msg.get('payload', {}).get('headers', [])}
+            body = _get_email_body(msg.get('payload', {}))
 
-            details = {
+            # Get attachment info
+            attachments = []
+            for part in msg.get('payload', {}).get('parts', []):
+                if part.get('filename'):
+                    attachments.append({
+                        "filename": part['filename'],
+                        "mimeType": part.get('mimeType', 'unknown'),
+                        "size": part.get('body', {}).get('size', 0)
+                    })
+
+            return _make_response({
                 "id": msg['id'],
                 "threadId": msg.get('threadId', ''),
                 "from": headers.get('From', 'Unknown'),
                 "to": headers.get('To', 'Unknown'),
+                "cc": headers.get('Cc', ''),
                 "subject": headers.get('Subject', 'No Subject'),
                 "date": headers.get('Date', 'Unknown'),
-                "snippet": msg.get('snippet', ''),
-                "labels": msg.get('labelIds', [])
-            }
+                "body": body,
+                "labels": msg.get('labelIds', []),
+                "attachments": attachments
+            })
 
-            return [types.TextContent(
-                type="text",
-                text=json.dumps(details, indent=2)
-            )]
+        # --- SEND ---
+        elif name == "send_email":
+            to = args.get("to", "")
+            subject = args.get("subject", "")
+            body = args.get("body", "")
+            cc = args.get("cc", "")
+            bcc = args.get("bcc", "")
+
+            message = MIMEText(body)
+            message['to'] = to
+            message['subject'] = subject
+            if cc:
+                message['cc'] = cc
+            if bcc:
+                message['bcc'] = bcc
+
+            raw = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
+
+            sent = gmail.users().messages().send(
+                userId='me', body={'raw': raw}
+            ).execute()
+
+            return _make_response({
+                "sent": True,
+                "messageId": sent['id'],
+                "threadId": sent.get('threadId', ''),
+                "to": to,
+                "subject": subject
+            })
+
+        # --- REPLY ---
+        elif name == "reply_to_email":
+            email_id = args.get("email_id", "")
+            body = args.get("body", "")
+
+            # Get original message for headers
+            original = gmail.users().messages().get(
+                userId='me', id=email_id, format='metadata',
+                metadataHeaders=['From', 'To', 'Subject', 'Message-ID']
+            ).execute()
+
+            headers = {h['name']: h['value'] for h in original.get('payload', {}).get('headers', [])}
+            thread_id = original.get('threadId', '')
+
+            subject = headers.get('Subject', '')
+            if not subject.lower().startswith('re:'):
+                subject = f"Re: {subject}"
+
+            reply_to = headers.get('From', '')
+
+            message = MIMEText(body)
+            message['to'] = reply_to
+            message['subject'] = subject
+            message['In-Reply-To'] = headers.get('Message-ID', '')
+            message['References'] = headers.get('Message-ID', '')
+
+            raw = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
+
+            sent = gmail.users().messages().send(
+                userId='me', body={'raw': raw, 'threadId': thread_id}
+            ).execute()
+
+            return _make_response({
+                "sent": True,
+                "messageId": sent['id'],
+                "threadId": sent.get('threadId', ''),
+                "to": reply_to,
+                "subject": subject
+            })
+
+        # --- TRASH (safe delete) ---
+        elif name == "trash_emails":
+            query = args.get("query", "")
+            max_trash = min(args.get("max_trash", 50), 500)
+
+            messages = _search_messages(gmail, query, max_trash)
+
+            if not messages:
+                return _make_response({"found": 0, "trashed": 0, "query": query})
+
+            trashed = 0
+            failed = 0
+            for msg in messages:
+                try:
+                    gmail.users().messages().trash(userId='me', id=msg['id']).execute()
+                    trashed += 1
+                except Exception as e:
+                    failed += 1
+                    logger.error(f"Failed to trash message {msg['id']}: {e}")
+
+            return _make_response({
+                "found": len(messages), "trashed": trashed, "failed": failed, "query": query
+            })
+
+        # --- DELETE (permanent) ---
+        elif name == "delete_emails":
+            query = args.get("query", "")
+            max_delete = min(args.get("max_delete", 50), 500)
+
+            messages = _search_messages(gmail, query, max_delete)
+
+            if not messages:
+                return _make_response({"found": 0, "deleted": 0, "query": query})
+
+            # Use batchDelete for efficiency when deleting many messages
+            message_ids = [msg['id'] for msg in messages]
+
+            if len(message_ids) > 1:
+                try:
+                    gmail.users().messages().batchDelete(
+                        userId='me', body={'ids': message_ids}
+                    ).execute()
+                    return _make_response({
+                        "found": len(message_ids), "deleted": len(message_ids),
+                        "failed": 0, "query": query
+                    })
+                except Exception as e:
+                    logger.error(f"Batch delete failed: {e}, falling back to individual delete")
+
+            # Fallback: delete one by one
+            deleted = 0
+            failed = 0
+            for msg_id in message_ids:
+                try:
+                    gmail.users().messages().delete(userId='me', id=msg_id).execute()
+                    deleted += 1
+                except Exception as e:
+                    failed += 1
+                    logger.error(f"Failed to delete message {msg_id}: {e}")
+
+            return _make_response({
+                "found": len(message_ids), "deleted": deleted, "failed": failed, "query": query
+            })
+
+        # --- STAR / UNSTAR ---
+        elif name == "star_emails":
+            query = args.get("query", "")
+            messages = _search_messages(gmail, query)
+
+            if not messages:
+                return _make_response({"found": 0, "starred": 0, "query": query})
+
+            count = 0
+            for msg in messages:
+                try:
+                    gmail.users().messages().modify(
+                        userId='me', id=msg['id'],
+                        body={"addLabelIds": ["STARRED"]}
+                    ).execute()
+                    count += 1
+                except Exception as e:
+                    logger.error(f"Failed to star message {msg['id']}: {e}")
+
+            return _make_response({"found": len(messages), "starred": count, "query": query})
+
+        elif name == "unstar_emails":
+            query = args.get("query", "")
+            messages = _search_messages(gmail, query)
+
+            if not messages:
+                return _make_response({"found": 0, "unstarred": 0, "query": query})
+
+            count = 0
+            for msg in messages:
+                try:
+                    gmail.users().messages().modify(
+                        userId='me', id=msg['id'],
+                        body={"removeLabelIds": ["STARRED"]}
+                    ).execute()
+                    count += 1
+                except Exception as e:
+                    logger.error(f"Failed to unstar message {msg['id']}: {e}")
+
+            return _make_response({"found": len(messages), "unstarred": count, "query": query})
+
+        # --- READ STATUS ---
+        elif name == "mark_as_read":
+            query = args.get("query", "")
+            messages = _search_messages(gmail, query)
+
+            if not messages:
+                return _make_response({"found": 0, "marked_read": 0, "query": query})
+
+            count = 0
+            for msg in messages:
+                try:
+                    gmail.users().messages().modify(
+                        userId='me', id=msg['id'],
+                        body={"removeLabelIds": ["UNREAD"]}
+                    ).execute()
+                    count += 1
+                except Exception as e:
+                    logger.error(f"Failed to mark as read {msg['id']}: {e}")
+
+            return _make_response({"found": len(messages), "marked_read": count, "query": query})
+
+        elif name == "mark_as_unread":
+            query = args.get("query", "")
+            messages = _search_messages(gmail, query)
+
+            if not messages:
+                return _make_response({"found": 0, "marked_unread": 0, "query": query})
+
+            count = 0
+            for msg in messages:
+                try:
+                    gmail.users().messages().modify(
+                        userId='me', id=msg['id'],
+                        body={"addLabelIds": ["UNREAD"]}
+                    ).execute()
+                    count += 1
+                except Exception as e:
+                    logger.error(f"Failed to mark as unread {msg['id']}: {e}")
+
+            return _make_response({"found": len(messages), "marked_unread": count, "query": query})
+
+        # --- ARCHIVE ---
+        elif name == "archive_emails":
+            query = args.get("query", "")
+            messages = _search_messages(gmail, query)
+
+            if not messages:
+                return _make_response({"found": 0, "archived": 0, "query": query})
+
+            count = 0
+            for msg in messages:
+                try:
+                    gmail.users().messages().modify(
+                        userId='me', id=msg['id'],
+                        body={"removeLabelIds": ["INBOX"]}
+                    ).execute()
+                    count += 1
+                except Exception as e:
+                    logger.error(f"Failed to archive message {msg['id']}: {e}")
+
+            return _make_response({"found": len(messages), "archived": count, "query": query})
 
         else:
-            return [types.TextContent(
-                type="text",
-                text=f"Unknown tool: {name}"
-            )]
+            return _make_response({"error": f"Unknown tool: {name}"})
 
     except FileNotFoundError as e:
-        return [types.TextContent(
-            type="text",
-            text=json.dumps({
-                "error": "Setup required",
-                "message": str(e),
-                "hint": "See README.md for setup instructions"
-            }, indent=2)
-        )]
+        return _make_response({"error": "Setup required", "message": str(e), "hint": "See README.md for setup instructions"})
     except ImportError as e:
-        return [types.TextContent(
-            type="text",
-            text=json.dumps({
-                "error": "Dependencies missing",
-                "message": str(e)
-            }, indent=2)
-        )]
+        return _make_response({"error": "Dependencies missing", "message": str(e)})
     except Exception as e:
         logger.error(f"Error executing {name}: {e}")
-        return [types.TextContent(
-            type="text",
-            text=json.dumps({
-                "error": "Execution failed",
-                "message": str(e)
-            }, indent=2)
-        )]
+        return _make_response({"error": "Execution failed", "message": str(e)})
 
 
 async def main():
@@ -564,7 +685,7 @@ async def main():
             write_stream,
             InitializationOptions(
                 server_name="gmail-cleaner",
-                server_version="1.0.0",
+                server_version="2.0.0",
                 capabilities=app.get_capabilities(
                     notification_options=NotificationOptions(),
                     experimental_capabilities={},
@@ -574,7 +695,7 @@ async def main():
 
 
 if __name__ == "__main__":
-    logger.info("Starting Gmail MCP Server...")
+    logger.info("Starting Gmail MCP Server v2.0...")
 
     try:
         logger.info("Server is running and ready to accept requests")

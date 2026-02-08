@@ -1,19 +1,22 @@
 # Gmail MCP Server
 
-Manage your Gmail inbox: search, delete, star, archive, and mark emails as read/unread.
+Manage your Gmail inbox: search, read, send, reply, delete, star, archive, and mark emails as read/unread.
 
-## Status: Ready
+## Status: Ready (v2.0)
 
-This server provides safe, read-modify access to your Gmail account using Google's official Gmail API.
+Full Gmail management with read, write, send, and delete capabilities using Google's official Gmail API.
 
 ## Features
 
 - **Search Emails**: Powerful Gmail query syntax support
-- **Delete Emails**: Permanently delete emails (with safety limits)
+- **Read Emails**: Full email body, headers, and attachment info
+- **Send Emails**: Compose and send new emails with CC/BCC
+- **Reply to Emails**: Reply within existing threads
+- **Trash Emails**: Safe delete (recoverable for 30 days)
+- **Delete Emails**: Permanent deletion with batch support
 - **Star/Unstar**: Flag important emails
 - **Mark Read/Unread**: Manage email read status
 - **Archive**: Remove emails from inbox
-- **Email Details**: Get full details of specific emails
 
 ## Setup
 
@@ -63,7 +66,7 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
   "mcpServers": {
     "gmail-cleaner": {
       "command": "python3",
-      "args": ["/Users/yourusername/Desktop/repo/ClaudeMCP/servers/gmail/gmail_cleaner.py"]
+      "args": ["/path/to/ClaudeMCP/servers/gmail/gmail_cleaner.py"]
     }
   }
 }
@@ -73,7 +76,7 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 
 The first time you use the server, it will:
 1. Open your browser for Google OAuth
-2. Ask you to authorize the app
+2. Ask you to authorize the app (full Gmail access + send)
 3. Save a `token.json` file for future use
 
 **Note**: The `token.json` file contains your access credentials - keep it secure and don't commit it to git!
@@ -86,20 +89,50 @@ Search for emails using Gmail's query syntax.
 **Parameters:**
 - `query` (required): Gmail search query
 - `max_results` (optional): Max results (default 20, max 100)
-- `include_snippet` (optional): Include email previews (default true)
 
 **Example queries:**
 - `subject:Invoice` - Emails with "Invoice" in subject
 - `from:example@gmail.com` - Emails from specific sender
 - `is:unread older_than:30d` - Unread emails older than 30 days
 - `has:attachment larger:5M` - Emails with attachments over 5MB
+- `before:2020/01/01` - Emails before a specific date
 
-### `delete_emails`
-Permanently delete emails (use with caution!).
+### `read_email`
+Read the full content of an email including body text and attachment info.
+
+**Parameters:**
+- `email_id` (required): Gmail message ID (from search results)
+
+### `send_email`
+Send a new email from your Gmail account.
+
+**Parameters:**
+- `to` (required): Recipient email (comma-separated for multiple)
+- `subject` (required): Email subject line
+- `body` (required): Email body (plain text)
+- `cc` (optional): CC recipients (comma-separated)
+- `bcc` (optional): BCC recipients (comma-separated)
+
+### `reply_to_email`
+Reply to an existing email thread.
+
+**Parameters:**
+- `email_id` (required): Gmail message ID to reply to
+- `body` (required): Reply body text
+
+### `trash_emails`
+Move emails to trash (recoverable for 30 days).
 
 **Parameters:**
 - `query` (required): Gmail search query
-- `max_delete` (optional): Safety limit (default 50, max 100)
+- `max_trash` (optional): Safety limit (default 50, max 500)
+
+### `delete_emails`
+PERMANENTLY delete emails (cannot be recovered!).
+
+**Parameters:**
+- `query` (required): Gmail search query
+- `max_delete` (optional): Safety limit (default 50, max 500)
 
 ### `star_emails` / `unstar_emails`
 Add or remove stars from emails.
@@ -119,22 +152,19 @@ Remove emails from inbox (archives them).
 **Parameters:**
 - `query` (required): Gmail search query
 
-### `get_email_details`
-Get full details of a specific email.
-
-**Parameters:**
-- `email_id` (required): Gmail message ID (from search results)
-
 ## Usage Examples
 
 Ask Claude things like:
 
 - "Search my Gmail for all unread emails from last week"
+- "Read the latest email from my boss"
+- "Send an email to john@example.com about the meeting tomorrow"
+- "Reply to the latest email from Sarah saying I'll be there"
+- "Trash all promotional emails older than 60 days"
+- "Permanently delete all emails before 2020"
 - "Star all emails from my boss with 'urgent' in the subject"
-- "Delete all promotional emails older than 60 days"
 - "Mark all emails from newsletters@example.com as read"
 - "Archive all emails in my inbox from before January 2024"
-- "Show me emails with attachments larger than 10MB"
 
 ## Gmail Query Syntax
 
@@ -164,8 +194,9 @@ Combine with AND/OR:
 ## Security
 
 - **OAuth Authentication**: Uses official Google OAuth flow
-- **Read-Modify Access**: Can read and modify emails, but not send
-- **Safety Limits**: Delete operations limited to prevent accidents
+- **Full Access Scope**: Required for permanent delete and send capabilities
+- **Safety Limits**: Delete/trash operations limited to prevent accidents
+- **Batch Operations**: Uses efficient batchDelete for bulk operations
 - **Token Storage**: Credentials stored locally in `token.json`
 - **No API Keys**: No hardcoded credentials in code
 
@@ -179,7 +210,7 @@ Combine with AND/OR:
 
 1. **Keep credentials.json private**: Contains your OAuth client ID/secret
 2. **Don't commit token.json**: Contains your personal access credentials
-3. **Review before deleting**: Delete operations are permanent
+3. **Trash vs Delete**: Use `trash_emails` for safe deletion (30-day recovery), `delete_emails` for permanent
 4. **API Quotas**: Free Gmail API has daily quotas (250 quota units/user/second, 1 billion/day)
 
 ## Troubleshooting
@@ -203,8 +234,29 @@ Combine with AND/OR:
 - Delete `token.json` and try again
 - Restart Claude Desktop
 
+**Emails not deleting (0 deleted)**
+- The old `gmail.modify` scope doesn't support permanent delete
+- Delete `token.json` to force re-authentication with the new full-access scope
+- Restart Claude Desktop
+
 **Rate limit errors**
 - The Gmail API has quotas - wait a few seconds between large operations
+
+## Changelog
+
+### v2.0
+- **Fixed**: Delete now works - upgraded scope from `gmail.modify` to full access (`https://mail.google.com/`)
+- **Added**: `read_email` - Read full email body and attachments
+- **Added**: `send_email` - Send new emails with CC/BCC support
+- **Added**: `reply_to_email` - Reply within existing threads
+- **Added**: `trash_emails` - Safe delete (recoverable for 30 days)
+- **Added**: Batch delete for bulk operations
+- **Added**: Pagination support for large result sets
+- **Improved**: All responses now return structured JSON
+- **Improved**: Consistent error handling across all tools
+
+### v1.0
+- Initial release with search, delete, star, mark read/unread, archive
 
 ## References
 
