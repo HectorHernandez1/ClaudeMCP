@@ -28,10 +28,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Database configuration from environment
-# SECURITY: Only localhost connections allowed - no remote database access
-ALLOWED_HOST = "localhost"
 DB_CONFIG = {
-    "host": ALLOWED_HOST,  # Fixed to localhost for security
+    "host": os.getenv("DB_HOST", "localhost"),
     "port": int(os.getenv("DB_PORT", "5432")),
     "database": os.getenv("DB_NAME", "money_stuff"),
     "user": os.getenv("DB_USER", ""),
@@ -295,13 +293,13 @@ async def handle_list_tools() -> List[types.Tool]:
         ),
         types.Tool(
             name="search_transactions",
-            description="Search transactions by description",
+            description="Search transactions by merchant name",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "search_term": {
                         "type": "string",
-                        "description": "Text to search for in transaction descriptions",
+                        "description": "Text to search for in merchant names",
                     },
                     "limit": {
                         "type": "integer",
@@ -475,11 +473,11 @@ async def handle_call_tool(
                 SELECT
                     t.id,
                     t.transaction_date,
-                    t.description,
+                    t.merchant_name,
                     t.amount,
                     sc.category_name,
                     p.name as person_name,
-                    at.account_name
+                    at.card_type
                 FROM {SCHEMA}.transactions t
                 JOIN {SCHEMA}.spending_categories sc ON t.category_id = sc.id
                 JOIN {SCHEMA}.persons p ON t.person_id = p.id
@@ -594,14 +592,14 @@ async def handle_call_tool(
                 SELECT
                     t.id,
                     t.transaction_date,
-                    t.description,
+                    t.merchant_name,
                     t.amount,
                     sc.category_name,
                     p.name as person_name
                 FROM {SCHEMA}.transactions t
                 JOIN {SCHEMA}.spending_categories sc ON t.category_id = sc.id
                 JOIN {SCHEMA}.persons p ON t.person_id = p.id
-                WHERE LOWER(t.description) LIKE LOWER($1)
+                WHERE LOWER(t.merchant_name) LIKE LOWER($1)
                 ORDER BY t.transaction_date DESC
                 LIMIT $2
             """
@@ -633,9 +631,9 @@ async def handle_call_tool(
 
         elif name == "list_accounts":
             query = f"""
-                SELECT id, account_name
+                SELECT id, card_type
                 FROM {SCHEMA}.account_type
-                ORDER BY account_name
+                ORDER BY card_type
             """
             results = await db_provider.execute_query(query)
             return format_success_response({"accounts": results})
